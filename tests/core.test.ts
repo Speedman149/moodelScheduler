@@ -1,0 +1,42 @@
+import { describe,it,expect } from "vitest";
+import { normalizeCourse,normalizeCourseNumber,parseTime,parseTimeRange,overlaps } from "@/lib/normalize";
+import { parsePrerequisites } from "@/lib/prerequisites";
+import { DEFAULT_PREFERENCES,generateSchedules,getConflicts,sanitizePreferences,scoreSchedule } from "@/lib/schedule";
+import type { Course,CourseOption,Meeting } from "@/types/course";
+const meeting=(id:string,day=0,start=630,end=750):Meeting=>({id,courseId:id,courseName:id,registrationGroup:"11",componentGroup:"10",type:"הרצאה",day,startMinutes:start,endMinutes:end,lecturer:"מרצה א",room:""});
+const option=(id:string,meetings:Meeting[],registrationGroup="11"):CourseOption=>({id,courseId:id.split(":")[0],registrationGroup,meetings,warnings:[]});
+const course=(id:string,options:CourseOption[]):Course=>({id,name:id,credits:3,faculty:"",lecturers:[],prerequisites:"",syllabus:"",notes:"",exams:[],general:{},entries:[],options});
+describe("course numbers",()=>{
+ it("converts legacy six digit numbers to SAP department + course format",()=>{expect(normalizeCourseNumber("234124")).toBe("02340124");expect(normalizeCourseNumber(104031)).toBe("01040031");expect(normalizeCourseNumber("02340124")).toBe("02340124");expect(normalizeCourseNumber(" 234124 ")).toBe("02340124");});
+ it("rejects malformed and overlong numbers",()=>{expect(normalizeCourseNumber("abc")).toBe("");expect(normalizeCourseNumber("123456789")).toBe("");expect(normalizeCourseNumber("234-124")).toBe("");});
+});
+describe("times and conflicts",()=>{
+ it("parses minutes, half hours, and ranges",()=>{expect(parseTime("10:30")).toBe(630);expect(parseTimeRange("08:30 – 10:30")).toEqual({startMinutes:510,endMinutes:630});});
+ it("rejects invalid or reversed ranges",()=>{for(const t of ["24:00","9:70","10","-1:30"])expect(parseTime(t)).toBeNull();expect(parseTimeRange("10:30 - 08:30")).toBeNull();});
+ it("uses half open intervals and separates days",()=>{expect(overlaps(meeting("a"),meeting("b",0,750,810))).toBe(false);expect(overlaps(meeting("a"),meeting("b",0,749,810))).toBe(true);expect(overlaps(meeting("a"),meeting("b",1))).toBe(false);expect(getConflicts([meeting("a"),meeting("b",0,700,800)])).toHaveLength(1);});
+});
+describe("prerequisite expressions",()=>{
+ it("preserves AND / OR structure and precedence",()=>{const r=parsePrerequisites("(02340114 או 02340117) ו-02340124");expect(r.error).toBeNull();expect(r.ast?.kind).toBe("and");if(r.ast?.kind==="and")expect(r.ast.children[0].kind).toBe("or");const p=parsePrerequisites("02340114 OR 02340117 AND 02340124");expect(p.ast?.kind).toBe("or");if(p.ast?.kind==="or")expect(p.ast.children[1].kind).toBe("and");});
+ it("supports implicit AND and normalizes legacy IDs",()=>{expect(parsePrerequisites("234114 234117").ast).toEqual({kind:"and",children:[{kind:"course",id:"02340114"},{kind:"course",id:"02340117"}]});});
+ it("preserves source when syntax is unknown",()=>{for(const raw of ["(02340114","02340114 או","70 נקודות","02340114)"]) {const r=parsePrerequisites(raw);expect(r.error).toBeTruthy();expect(r.raw).toBe(raw);expect(r.ast).toBeNull();}});
+ it("handles empty prerequisite and depth limits",()=>{expect(parsePrerequisites("").ast).toBeNull();expect(parsePrerequisites("(".repeat(70)+"02340114"+")".repeat(70)).error).toBeTruthy();});
+});
+describe("registration grouping",()=>{
+ const raw={general:{"מספר מקצוע":"02340124","שם מקצוע":"קורס"},schedule:[{"קבוצה":11,"מס.":10,"סוג":"הרצאה","יום":"ראשון","שעה":"10:30 - 12:30"},{"קבוצה":11,"מס.":11,"סוג":"תרגול","יום":"שני","שעה":"10:30 - 11:30"},{"קבוצה":11,"מס.":11,"סוג":"תרגול","יום":"שלישי","שעה":"10:30 - 11:30"},{"קבוצה":12,"מס.":10,"סוג":"הרצאה","יום":"ראשון","שעה":"10:30 - 12:30"},{"קבוצה":12,"מס.":12,"סוג":"מעבדה","יום":"רביעי","שעה":"10:30 - 13:30"}]};
+ it("keeps shared lectures inside each registration group and all weekly meetings",()=>{const c=normalizeCourse(raw)!;expect(c.options).toHaveLength(2);expect(c.options[0].meetings).toHaveLength(3);expect(c.options[1].meetings).toHaveLength(2);expect(c.options[1].meetings.map(m=>m.componentGroup)).toEqual(["10","12"]);});
+ it("does not silently drop unknown schedules",()=>{const c=normalizeCourse({...raw,schedule:[...raw.schedule,{"קבוצה":11,"יום":"לא ידוע","שעה":"לא ידוע","סוג":"מעבדה"}]})!;expect(c.entries).toHaveLength(6);expect(c.options[0].warnings).toHaveLength(1);expect(generateSchedules([c],DEFAULT_PREFERENCES).schedules.every(s=>s.options[0].registrationGroup==="12")).toBe(true);});
+ it("rejects internal overlap instead of inventing alternate component choices",()=>{const c=normalizeCourse({...raw,schedule:[...raw.schedule,{"קבוצה":11,"מס.":13,"יום":"ראשון","שעה":"11:30 - 12:30","סוג":"תרגול"}]})!;expect(c.options[0].warnings[0]).toContain("חפיפה");});
+ it("deduplicates exact copied rows and tolerates missing metadata",()=>{const c=normalizeCourse({...raw,schedule:[...raw.schedule,raw.schedule[0]]})!;expect(c.options[0].meetings).toHaveLength(3);expect(c.credits).toBeNull();expect(c.entries[0].room).toBe("");expect(normalizeCourse({})).toBeNull();});
+});
+describe("backtracking and preferences",()=>{
+ const courses=[course("a",[option("a:11",[meeting("a",0)],"11"),option("a:12",[meeting("a2",1)],"12")]),course("b",[option("b:11",[meeting("b",0,700,800)])])];
+ it("returns only non-overlapping whole registration groups",()=>{const r=generateSchedules(courses,DEFAULT_PREFERENCES);expect(r.schedules).toHaveLength(1);expect(r.schedules[0].options[0].courseId).toBe("b");expect(r.schedules[0].options.find(o=>o.courseId==="a")?.registrationGroup).toBe("12");expect(getConflicts(r.schedules[0].meetings)).toHaveLength(0);});
+ it("distinguishes impossible hard constraints from softer penalties",()=>{const p={...DEFAULT_PREFERENCES,freeDay:1,freeDayRule:{hard:true,weight:5}};expect(generateSchedules(courses,p).schedules).toHaveLength(0);const soft=generateSchedules(courses,{...p,freeDayRule:{hard:false,weight:5}});expect(soft.schedules).toHaveLength(1);expect(soft.schedules[0].score).toBeLessThan(100);});
+ it("respects group allowlists, including an empty allowlist",()=>{expect(generateSchedules(courses,DEFAULT_PREFERENCES,{a:["11"]}).schedules).toHaveLength(0);expect(generateSchedules(courses,DEFAULT_PREFERENCES,{a:[]}).errors).toHaveLength(1);});
+ it("honors hard lecturer, start, finish and maximum-gap rules",()=>{const o=[option("a:11",[meeting("a",0,510,630),meeting("a2",0,800,900)])];expect(scoreSchedule(o,{...DEFAULT_PREFERENCES,startRule:{hard:true,weight:0}})).toBeNull();expect(scoreSchedule(o,{...DEFAULT_PREFERENCES,finishMinutes:850,finishRule:{hard:true,weight:0}})).toBeNull();expect(scoreSchedule(o,{...DEFAULT_PREFERENCES,maxGapMinutes:90})).toBeNull();expect(scoreSchedule(o,{...DEFAULT_PREFERENCES,avoidLecturer:"מרצה א",lecturerRule:{hard:true,weight:0}})).toBeNull();expect(scoreSchedule(o,{...DEFAULT_PREFERENCES,preferLecturer:"לא קיים",lecturerRule:{hard:true,weight:0}})).toBeNull();});
+ it("measures actual minutes and gaps",()=>{const r=scoreSchedule([option("a",[meeting("a",0,510,630),meeting("a2",0,750,900)])],DEFAULT_PREFERENCES)!;expect(r.metrics.totalGapMinutes).toBe(120);expect(r.metrics.morningMinutes).toBe(120);expect(r.metrics.campusDays).toBe(1);expect(r.metrics.freeDays).toEqual([1,2,3,4]);expect(r.score).toBeGreaterThanOrEqual(0);expect(r.score).toBeLessThanOrEqual(100);});
+ it("does not count Friday as a weekday off or hide Friday meetings",()=>{const r=scoreSchedule([option("a",[meeting("a",5)])],DEFAULT_PREFERENCES)!;expect(r.metrics.campusDays).toBe(1);expect(r.metrics.freeDays).toEqual([0,1,2,3,4]);expect(r.meetings[0].day).toBe(5);});
+ it("reports a search limit instead of claiming exhaustive results",()=>{expect(generateSchedules(courses,DEFAULT_PREFERENCES,{},1).truncated).toBe(true);});
+ it("retains only the top 10 from a complete search",()=>{const c=course("a",Array.from({length:15},(_,i)=>option("a:"+i,[meeting("a"+i,i%5,500+i*10,550+i*10)],String(i))));const r=generateSchedules([c],DEFAULT_PREFERENCES);expect(r.validCount).toBe(15);expect(r.schedules).toHaveLength(10);expect(r.schedules.every((s,i,a)=>!i||a[i-1].score>=s.score)).toBe(true);});
+ it("handles no courses, no options and malformed preferences",()=>{expect(generateSchedules([],DEFAULT_PREFERENCES).errors).toHaveLength(1);expect(generateSchedules([course("a",[])],DEFAULT_PREFERENCES).errors).toHaveLength(1);expect(sanitizePreferences({freeDay:900,startMinutes:NaN,freeDayRule:{weight:100,hard:"yes"}}).freeDayRule).toEqual({weight:5,hard:false});});
+});

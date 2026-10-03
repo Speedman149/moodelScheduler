@@ -1,0 +1,34 @@
+import { test,expect } from "@playwright/test";
+test("real course search, persistence, graph and automatic schedules",async({page})=>{
+ await page.goto("/");
+ await expect(page.getByRole("heading",{name:"מה נלמד הסמסטר?"})).toBeVisible();
+ await page.screenshot({path:".qa/home-desktop.png"});
+ await page.getByRole("textbox",{name:"חיפוש קורס לפי שם או מספר"}).fill("234124");
+ await expect(page.locator(".course-row")).toHaveCount(1);
+ await page.getByRole("button",{name:"הוספת קורס 02340124"}).click();
+ await page.reload();
+ await page.getByRole("textbox",{name:"חיפוש קורס לפי שם או מספר"}).fill("234124");
+ await expect(page.getByRole("button",{name:"הסרת קורס 02340124"})).toBeVisible();
+ await page.locator(".course-row .course-title").click();
+ await expect(page.getByRole("heading",{name:"מבוא לתכנות מערכות",exact:true})).toBeVisible();
+ await expect(page.locator(".operator-label").first()).toContainText("או");
+ await page.goto("/planner");
+ await expect(page.getByLabel("קבוצת רישום מבוא לתכנות מערכות")).toBeVisible();
+ await page.getByLabel("קבוצת רישום מבוא לתכנות מערכות").selectOption("13");
+ await page.reload();
+ await expect(page.getByLabel("קבוצת רישום מבוא לתכנות מערכות")).toHaveValue("13");
+ await page.getByRole("button",{name:"יצירת מערכות חכמות"}).click();
+ await expect(page).toHaveURL("/schedules");
+ await expect(page.locator(".result-card").first()).toBeVisible();
+ await expect(page.locator(".calendar-panel .badge")).toContainText("ללא חפיפות");
+ await page.getByRole("button",{name:"שמירה כמערכת שלי"}).click();
+ await expect(page).toHaveURL("/planner");
+});
+test("mobile layout stays inside viewport and theme switches",async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.goto("/");
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:".qa/home-mobile.png"});
+ await page.getByRole("button",{name:"מצב כהה",exact:true}).click();
+ await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+});

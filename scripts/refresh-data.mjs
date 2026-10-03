@@ -1,0 +1,10 @@
+import { writeFile,mkdir,rename } from "node:fs/promises";
+const source="https://raw.githubusercontent.com/michael-maltsev/technion-sap-info-fetcher/gh-pages/courses_2026_200.json";
+const response=await fetch(source,{signal:AbortSignal.timeout(30000)});
+if(!response.ok)throw new Error("Download failed: "+response.status);
+const text=await response.text(),data=JSON.parse(text);
+if(!Array.isArray(data)||data.length<100||!data.every(c=>c&&typeof c.general==="object"))throw new Error("Unexpected dataset structure; existing snapshot preserved");
+await mkdir("data",{recursive:true});
+await writeFile("data/courses_2026_200.json.tmp",text);
+await rename("data/courses_2026_200.json.tmp","data/courses_2026_200.json");
+console.log("Updated "+data.length+" real courses for 2026_200. Restart the server to reload.");

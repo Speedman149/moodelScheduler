@@ -24,7 +24,7 @@ export function scoreSchedule(options:CourseOption[],p:UserPreferences):Generate
  if(m.totalGapMinutes&&p.gaps.weight)violations.push(m.totalGapMinutes+" דקות חלונות");
  if(avoided)violations.push("מפגשים עם המרצה שממנו העדפת להימנע");
  if(p.preferLecturer&&!preferred)violations.push("המרצה המועדף לא מופיע במערכת");
- const parts:[[number,number],[number,number],[number,number],[number,number],[number,number],[number,number]]=[[p.freeDayRule.weight,Math.min(1,onFree/360)],[p.startRule.weight,Math.min(1,m.morningMinutes/600)],[p.finishRule.weight,Math.min(1,m.lateMinutes/600)],[p.gaps.weight,Math.min(1,m.totalGapMinutes/600)],[p.campusDays.weight,Math.max(0,m.campusDays-1)/6],[p.lecturerRule.weight,p.preferLecturer||p.avoidLecturer?Math.min(1,(avoided+(p.preferLecturer&&!preferred?1:0))/Math.max(1,meetings.length)):0]];
+ const parts:[[number,number],[number,number],[number,number],[number,number],[number,number],[number,number]]=[[p.freeDayRule.weight,Math.min(1,onFree/360)],[p.startRule.weight,Math.min(1,m.morningMinutes/600)],[p.finishRule.weight,Math.min(1,m.lateMinutes/600)],[p.gaps.weight,Math.min(1,m.totalGapMinutes/600)],[p.campusDays.weight,Math.max(0,m.campusDays-1)/6],[p.preferLecturer||p.avoidLecturer?p.lecturerRule.weight:0,p.preferLecturer||p.avoidLecturer?Math.min(1,(avoided+(p.preferLecturer&&!preferred?1:0))/Math.max(1,meetings.length)):0]];
  const totalWeight=parts.reduce((s,[w])=>s+w,0),penalty=parts.reduce((s,[w,v])=>s+w*v,0);
  return {id:options.map(o=>o.id).sort().join("|"),options:[...options],meetings,score:Math.round(100*(1-(totalWeight?penalty/totalWeight:0))),metrics:m,violations};
 }
