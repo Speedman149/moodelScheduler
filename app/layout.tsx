@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Shell from "@/components/Shell";
 import "./globals.css";
-export const metadata: Metadata = { title: "Technion Smart Planner | הסמסטר שלך, בדרך שלך", description: "חיפוש קורסים, חקר קדמים ותכנון מערכת שעות חכמה לסטודנטים בטכניון" };
-export default function RootLayout({children}:{children:React.ReactNode}) { return <html lang="he" dir="rtl"><body>{children}</body></html>; }
+export const metadata: Metadata={title:{default:"Technion Smart Planner | הסמסטר שלך, בדרך שלך",template:"%s | Smart Planner"},description:"חיפוש קורסים, חקר קדמים ותכנון מערכת שעות חכמה לסטודנטים בטכניון"};
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="he" dir="rtl" suppressHydrationWarning><body><Shell>{children}</Shell></body></html>;}

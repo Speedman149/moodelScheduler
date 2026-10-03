@@ -1,1 +1,3 @@
-export default function Home(){return <main style={{padding:60,fontFamily:"Arial"}}><h1>Technion Smart Planner</h1><p>בונים את הסמסטר שלך. נתוני הקורסים כבר מוכנים.</p></main>}
+import { getData } from "@/lib/data";
+import SearchClient from "@/components/SearchClient";
+export default function Home(){const {summaries}=getData();return <SearchClient courses={summaries} faculties={Array.from(new Set(summaries.map(c=>c.faculty))).sort((a,b)=>a.localeCompare(b,"he"))}/>;}
