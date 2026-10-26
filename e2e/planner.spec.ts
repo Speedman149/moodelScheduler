@@ -71,3 +71,48 @@ test("free combinations, saved component choices and switching back to registrat
  await expect(page.getByLabel("הרצאה מבוא לתכנות מערכות",{exact:true})).toHaveValue(pickedLecture);
  await expect(page.getByLabel("תרגול מבוא לתכנות מערכות",{exact:true})).toHaveValue(pickedTutorial);
 });
+
+test("bulk choices preserve the first valid option per type and persist both selection modes",async({page})=>{
+ await page.goto("/");
+ await page.getByRole("textbox",{name:"חיפוש קורס לפי שם או מספר"}).fill("234124");
+ await page.getByRole("button",{name:"הוספת קורס 02340124"}).click();
+ await page.goto("/planner");
+ const automatic=page.locator("details.allowed-groups");
+ await automatic.locator("summary").click();
+ const lecture=automatic.locator(".component-allowlist").filter({has:page.locator("strong").filter({hasText:/^הרצאה$/})});
+ const tutorial=automatic.locator(".component-allowlist").filter({has:page.locator("strong").filter({hasText:/^תרגול$/})});
+ const manualLecture=page.getByLabel("הרצאה מבוא לתכנות מערכות",{exact:true});
+ await manualLecture.selectOption({label:"הרצאה 20 · 1 מפגשים"});
+ const manualLectureId=await manualLecture.inputValue();
+ const firstOnly=automatic.getByRole("button",{name:"השארת הראשונה בלבד — מבוא לתכנות מערכות",exact:true});
+ const all=automatic.getByRole("button",{name:"בחירת הכול — מבוא לתכנות מערכות",exact:true});
+ await firstOnly.click();await expect(manualLecture).toHaveValue(manualLectureId);
+ for(const section of [lecture,tutorial]){
+   await expect(section.locator('input[type=checkbox]:checked')).toHaveCount(1);
+   await expect(section.locator('input[type=checkbox]:enabled').first()).toBeChecked();
+ }
+ await lecture.getByRole("button",{name:"בחירת הכול — הרצאה — מבוא לתכנות מערכות",exact:true}).click();
+ await expect(lecture.locator('input[type=checkbox]:checked')).toHaveCount(await lecture.locator('input[type=checkbox]:enabled').count());
+ await expect(tutorial.locator('input[type=checkbox]:checked')).toHaveCount(1);
+ await all.click();
+ await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(await automatic.locator('input[type=checkbox]:enabled').count());
+ await firstOnly.click();
+ const shortDays=page.getByRole("slider",{name:"חשיבות ימים קצרים ומאוזנים",exact:true});
+ await expect(shortDays).toHaveValue("3");await shortDays.focus();await shortDays.press("End");
+ await page.reload();
+ await expect(shortDays).toHaveValue("5");
+ await automatic.locator("summary").click();
+ await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(2);
+ const mode=page.getByRole("checkbox",{name:"לשמור על קבוצות הרישום"});
+ await mode.check();
+ if(!await automatic.evaluate(el=>(el as HTMLDetailsElement).open))await automatic.locator("summary").click();
+ await firstOnly.click();await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(1);
+ await expect(automatic.locator('input[type=checkbox]:enabled').first()).toBeChecked();
+ await all.click();await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(await automatic.locator('input[type=checkbox]:enabled').count());
+ await firstOnly.click();await page.reload();
+ await automatic.locator("summary").click();await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(1);
+ await mode.uncheck();await expect(automatic.locator('input[type=checkbox]:checked')).toHaveCount(2);
+ await page.getByRole("button",{name:"יצירת מערכות חכמות"}).click();
+ await expect(page).toHaveURL("/schedules");await expect(page.locator(".result-card")).toHaveCount(1);
+ await expect(page.locator(".result-card")).toContainText("היום הארוך ביותר");
+});

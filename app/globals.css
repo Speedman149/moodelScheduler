@@ -9,3 +9,5 @@
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 .grouping-mode{margin-bottom:22px}.grouping-mode .check-label{font-size:14px}.grouping-mode p{font-size:12px;margin-top:10px}.allowed-groups .component-allowlist{display:block;margin-top:15px}.component-allowlist>strong{display:block;margin-bottom:7px;color:var(--text);font-size:11px}.component-allowlist>div{display:flex;flex-wrap:wrap;gap:8px}
+
+.allowed-groups .bulk-choice-actions{display:flex;flex-wrap:wrap;gap:8px 16px;margin:10px 0}.bulk-choice-actions .text-link{font-size:10px;padding:5px 0;min-height:30px;text-align:start}.component-allowlist .bulk-choice-actions{margin:3px 0 8px}.short-days-help{font-size:11px;margin-top:17px}
